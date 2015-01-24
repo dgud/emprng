@@ -35,6 +35,8 @@
 -define(DEFAULT_ALG_HANDLER, as183).
 -define(SEED_DICT, random_seed).
 
+-record(alg, {seed0, seed, uniform, uniform_n}).
+
 %% =====================================================================
 %% Types
 %% =====================================================================
@@ -42,7 +44,7 @@
 %% This depends on the algorithm handler function
 -type alg_state() :: any().
 %% This is the algorithm handler function within this module
--type alg_handler() :: fun().
+-type alg_handler() :: #alg{}.
 %% Internal state
 -type state() :: {alg_handler(), alg_state()}.
 
@@ -69,16 +71,9 @@ seed0() ->
 
 -spec seed0(alg_handler()) -> state().
 
-seed0(Alg) ->
-    Seed0 = case Alg of
-		as183   -> as183_seed0();
-		exs64   -> exs64_seed0();
-		exsplus -> exsplus_seed0();
-		exs1024 -> exs1024_seed0();
-		sfmt    -> sfmt_seed0();
-		tinymt  -> tinymt_seed0()
-	    end,
-    {Alg, Seed0}.
+seed0(Alg0) ->
+    Alg = #alg{seed0=Seed0} = mk_alg(Alg0),
+    {Alg, Seed0()}.
 
 %% seed_put/1: internal function to put seed into the process dictionary.
 
@@ -133,15 +128,9 @@ seed(A1, A2, A3) ->
 -spec seed(Alg :: alg_handler(), AS :: alg_state()) ->
       undefined | state().
 
-seed(Alg, AS0) ->
-    AS = case Alg of
-	     as183   -> as183_seed(AS0);
-	     exs64   -> exs64_seed(AS0);
-	     exsplus -> exsplus_seed(AS0);
-	     exs1024 -> exs1024_seed(AS0);
-	     sfmt    -> sfmt_seed(AS0);
-	     tinymt  -> tinymt_seed(AS0)
-	 end,
+seed(Alg0, AS0) when is_atom(Alg0) ->
+    Alg = #alg{seed=Seed} = mk_alg(Alg0),
+    AS = Seed(AS0),
     seed_put({Alg, AS}),
     {Alg, AS}.
 
@@ -179,15 +168,8 @@ uniform(N) ->
 
 -spec uniform_s(state()) -> {float(), NewS :: state()}.
 
-uniform_s({Alg, AS0}) ->
-    {X, AS} = case Alg of
-		  as183   -> as183_uniform(AS0);
-		  exs64   -> exs64_uniform(AS0);
-		  exsplus -> exsplus_uniform(AS0);
-		  exs1024 -> exs1024_uniform(AS0);
-		  sfmt    -> sfmt_uniform(AS0);
-		  tinymt  -> tinymt_uniform(AS0)
-	      end,
+uniform_s({Alg = #alg{uniform=Uniform}, AS0}) ->
+    {X, AS} = Uniform(AS0),
     {X, {Alg, AS}}.
 
 %% uniform_s/2: given an integer N >= 1 and a state, uniform_s/2
@@ -197,16 +179,32 @@ uniform_s({Alg, AS0}) ->
 -spec uniform_s(N :: pos_integer(), state()) ->
       {pos_integer(), NewS :: state()}.
 
-uniform_s(N, {Alg, AS0}) when is_integer(N), N >= 1 ->
-    {X, AS} = case Alg of
-		  as183   -> as183_uniform(N, AS0);
-		  exs64   -> exs64_uniform(N, AS0);
-		  exsplus -> exsplus_uniform(N, AS0);
-		  exs1024 -> exs1024_uniform(N, AS0);
-		  sfmt    -> sfmt_uniform(N, AS0);
-		  tinymt  -> tinymt_uniform(N, AS0)
-	      end,
+uniform_s(N, {Alg = #alg{uniform_n=Uniform}, AS0}) 
+  when is_integer(N), N >= 1 ->
+    {X, AS} = Uniform(N, AS0),
     {X, {Alg, AS}}.
+
+
+%% Setup alg record
+mk_alg(as183) ->  %% DEFAULT_ALG_HANDLER
+    #alg{seed0=fun as183_seed0/0, seed=fun as183_seed/1, 
+	 uniform=fun as183_uniform/1, uniform_n=fun as183_uniform/2};
+mk_alg(exs64) -> 
+    #alg{seed0=fun exs64_seed0/0, seed=fun exs64_seed/1, 
+	 uniform=fun exs64_uniform/1, uniform_n=fun exs64_uniform/2};
+mk_alg(exsplus) -> 
+    #alg{seed0=fun exsplus_seed0/0, seed=fun exsplus_seed/1, 
+	 uniform=fun exsplus_uniform/1, uniform_n=fun exsplus_uniform/2};
+mk_alg(exs1024) -> 
+    #alg{seed0=fun exs1024_seed0/0, seed=fun exs1024_seed/1, 
+	 uniform=fun exs1024_uniform/1, uniform_n=fun exs1024_uniform/2};
+mk_alg(sfmt) -> 
+    #alg{seed0=fun sfmt_seed0/0, seed=fun sfmt_seed/1, 
+	 uniform=fun sfmt_uniform/1, uniform_n=fun sfmt_uniform/2};
+mk_alg(tinymt) -> 
+    #alg{seed0=fun tinymt_seed0/0, seed=fun tinymt_seed/1, 
+	 uniform=fun tinymt_uniform/1, uniform_n=fun tinymt_uniform/2}.
+
 
 %% =====================================================================
 %% AS183 PRNG
